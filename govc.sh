@@ -25,12 +25,12 @@ cmd=
 [ -x "$govc" ] || fatal "govc binary not found on $govc location"
 # we rely on terraformware settings
 [ -s "$vs_config" ] || fatal "No VSphere credentials found in $vs_config, exiting"
-vs_username="$(fgrep vsphere_username $HOME/.terraformware.conf)"
+vs_username="$(grep -F vsphere_username $HOME/.terraformware.conf)"
 vs_username="${vs_username##*= }"
-vs_password="$(fgrep vsphere_password $HOME/.terraformware.conf)"
+vs_password="$(grep -F vsphere_password $HOME/.terraformware.conf)"
 vs_password="${vs_password##*= }"
 vs_password=$(echo "$vs_password"|base64 -d)
-[ -n "$vs_username" -a -n "$vs_password" ] || fatal 'no vsphere credentials found'
+[ -n "$vs_username" ] && [ -n "$vs_password" ] || fatal 'no vsphere credentials found'
 
 show_help() {
 	cat <<EOF
@@ -98,7 +98,7 @@ get_vm_pstate() {
 	local vm=$1; shift
 	local pstate=
 	[ -n "$vm" ] || fatal 'VM name is missing'
-	local pstate=$($govc object.collect -s "$(get_vm_path $vm)" runtime.powerState)
+	local pstate=$($govc object.collect -s $(get_vm_path "$vm") runtime.powerState)
 	[ -n "$pstate" ] && printf '%s\n' "$pstate" || return 1
 }
 
@@ -145,7 +145,7 @@ get_vm_option_bul() {
 	local vm=$1; shift
 	local opt=$1; shift
 	output=
-	[ -n "$vm" -a -n "$opt" ] || fatal 'Not enought args to operate!'
+	[ -n "$vm" ] && [ -n "$opt" ] || fatal 'Not enought args to operate!'
 	vm=$(get_vm_path "$vm")
 	output=$($govc object.collect -s "$vm" "$opt")
 	[ -n "$output" -a "$output" = true ] && return 0 \
@@ -156,7 +156,7 @@ get_vm_option_val() {
 	local vm=$1; shift
 	local opt=$1; shift
 	output=
-	[ -n "$vm" -a -n "$opt" ] || fatal 'Not enought args to operate!'
+	[ -n "$vm" ] && [ -n "$opt" ] || fatal 'Not enought args to operate!'
 	vm=$(get_vm_path "$vm")
 	output=$($govc object.collect -s "$vm" "$opt")
 	[ -n "$output" ] && printf '%s\n' "$output" || return 1
@@ -174,8 +174,8 @@ vm_extend_disk() {
 	cur_size=$(($cur_size/(1024*1024)))
 	[ "$disk_size" -gt "$cur_size" ] || fatal "New disk size $disk_size < $cur_size"
 	disk_name=$($govc device.info -vm "$vm" -json disk-*|jq -r .Devices[].Name)
-	[ -n "disk_name" ] || return 1
-	output="vm.disk.change -vm "$vm" -disk.name="$disk_name" -size ${disk_size}M"
+	[ -n "$disk_name" ] || return 1
+	output="vm.disk.change -vm $vm -disk.name=$disk_name -size ${disk_size}M"
 	[ -n "$output" ] && printf '%s\n' "$output" || return 1
 }
 
@@ -282,40 +282,40 @@ export GOVC_DATACENTER="$vs_dc"
 cmd="$1"; shift
 
 case "$cmd" in
-	poweroff) cmd="vm.power -s $@"
+	poweroff) cmd="vm.power -s $1"
 		;;
-	poweron) cmd="vm.power -on $@"
+	poweron) cmd="vm.power -on $1"
 		;;
-	suspend) cmd="vm.power -suspend $@"
+	suspend) cmd="vm.power -suspend $1"
 		;;
-	pstate) get_vm_pstate "$@"
+	pstate) get_vm_pstate "$1"
 		exit $?
 		;;
-	info) cmd="vm.info -e $@"
+	info) cmd="vm.info -e $1"
 		;;
 	disk_info) cmd='device.info disk-*'
 		;;
 	disk_shrink)
 		vs_json=
-		cmd="datastore.disk.shrink $(get_vm_disk_path $@)"
+		cmd="datastore.disk.shrink $(get_vm_disk_path $1)"
 		;;
 	disk_extend)
 		vs_dsize="$1"; shift
-		cmd=$(vm_extend_disk "$vs_dsize" "$@")
+		cmd=$(vm_extend_disk "$vs_dsize" "$1")
 		;;
 	disk_change)
 		vs_dmode="$1"; shift
-		cmd=$(vm_change_disk "$vs_dmode" "$@")
+		cmd=$(vm_change_disk "$vs_dmode" "$1")
 		if [ "$vs_dmode" = "show" ]; then
 			printf '%s\n' "$cmd"
 			exit $?
 		else
-			vm_off "$@" || fatal "VM $@ should be OFF to operate!"
+			vm_off "$1" || fatal "VM $1 should be OFF to operate!"
 		fi
 		;;
 	memory_extend)
 		vs_mem="$1"; shift
-		cmd=$(vm_change_mem "$vs_mem" "$@")
+		cmd=$(vm_change_mem "$vs_mem" "$1")
 		;;
 	memory_hotadd_check)
 		get_vm_option_bul "$@" config.memoryHotAddEnabled && \
@@ -324,31 +324,31 @@ case "$cmd" in
 		exit $?
 		;;
 	memory_hotadd_enable)
-		vm_off "$@" || fatal "VM $@ should be OFF to operate!"
+		vm_off "$1" || fatal "VM $1 should be OFF to operate!"
 		cmd='vm.change -e mem.hotadd=true'
 		;;
 	cpu_add|cpu_remove)
 		vs_cpu="$1"; shift
-		cmd=$(vm_change_cpu "$vs_cpu" "$cmd" "$@")
+		cmd=$(vm_change_cpu "$vs_cpu" "$cmd" "$1")
 		;;
 	cpu_hotadd_check)
-		get_vm_option_bul "$@" config.cpuHotAddEnabled && \
+		get_vm_option_bul "$1" config.cpuHotAddEnabled && \
 			message 'Enabled' || \
 			message 'Disabled'
 		exit $?
 		;;
 	cpu_hotadd_enable)
-		vm_off "$@" || fatal "VM $@ should be OFF to operate!"
+		vm_off "$1" || fatal "VM $1 should be OFF to operate!"
 		cmd='vm.change -e vcpu.hotadd=true'
 		;;
         cpu_hotremove_check)
-		get_vm_option_bul "$@" config.cpuHotRemoveEnabled && \
+		get_vm_option_bul "$1" config.cpuHotRemoveEnabled && \
 			message 'Enabled' || \
 			message 'Disabled'
 		exit $?
 		;;
         cpu_hotremove_enable)
-		vm_off "$@" || fatal "VM $@ should be OFF to operate!"
+		vm_off "$1" || fatal "VM $1 should be OFF to operate!"
 		cmd='vm.change -e vcpu.hotremove=true'
 		;;
 	ls_snapshot)
@@ -356,7 +356,7 @@ case "$cmd" in
 		cmd='snapshot.tree'
 		;;
 	create_snapshot)
-		cmd="snapshot.create $(date +'%Y_%b_%d_%H.%M')"
+		cmd="snapshot.create $(LC_ALL=POSIX date +'%Y_%b_%d_%H.%M')"
 		;;
 	delete_snapshot|revert_snapshot)
 		         vs_snap="$1"; shift
@@ -376,9 +376,9 @@ esac
 [ -n "$vs_json" ] && cmd=$(printf '%s\n' "$cmd" |sed -ne 's,\(^[a-z]\+\?\.[a-z]\+\?\)\ ,\1 -json\ ,gp')
 
 if [ "$#" -eq 1 ]; then
-	export GOVC_VM="$@"
-	eval $govc $cmd
+	export GOVC_VM="$*"
+	eval "$govc" "$cmd"
 else
-	$govc $cmd $@
+	$govc "$cmd" "$*"
 fi
 
