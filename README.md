@@ -84,12 +84,12 @@ govc.sh [options] -- <govc direct cmd>
 
 ### Find vm:
 ```
-$ govc.sh -l fra -- find vm -name wiki-uat*
-vm/AMS_UBUNTU/wiki-uat.geant.org
+$ govc.sh -l fra -- find vm -name wiki*
+vm/AMS_UBUNTU/<vmname>
 ```
 ### Query vm config option (via direct option):
 ```
-$ govc.sh -l fra -- object.collect -s vm/AMS_UBUNTU/wiki-uat.geant.org config.memoryHotAddEnabled
+$ govc.sh -l fra -- object.collect -s vm/AMS_UBUNTU/<vmname> config.memoryHotAddEnabled
 false
 ```
 ### Enable memory hotadd (by using shortcut):
